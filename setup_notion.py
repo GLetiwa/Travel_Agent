@@ -1,5 +1,5 @@
 """
-One-time setup script: adds the required columns to your Notion database.
+One-time setup script: configures the Notion database columns for flight exports.
 
 Run once from the terminal:
     python3 setup_notion.py
@@ -33,15 +33,16 @@ def main() -> None:
         "Content-Type": "application/json",
     }
 
-    # These properties map to columns in the Notion database table.
-    # "Name" (title) already exists in every new database — we don't include it here.
-    # Notion's PATCH endpoint adds properties that don't exist and updates ones that do.
-    new_properties = {
-        "Rank":     {"number":    {"format": "number"}},
-        "Airline":  {"rich_text": {}},
-        "Price":    {"number":    {"format": "number"}},
-        "Currency": {"rich_text": {}},
+    properties = {
+        # Columns to remove (set to null deletes them)
+        "Rank":     None,
+        "Airline":  None,
+        "Currency": None,
+
+        # Columns to keep or create
+        # Price was previously a number — redefining as rich_text to include currency
         "Route":    {"rich_text": {}},
+        "Price":    {"rich_text": {}},
         "Stops":    {"number":    {"format": "number"}},
         "Duration": {"rich_text": {}},
         "Reason":   {"rich_text": {}},
@@ -51,7 +52,7 @@ def main() -> None:
     resp = requests.patch(
         f"{NOTION_API_BASE}/databases/{database_id}",
         headers=headers,
-        json={"properties": new_properties},
+        json={"properties": properties},
         timeout=15,
     )
 
@@ -59,8 +60,12 @@ def main() -> None:
         print(f"ERROR {resp.status_code}: {resp.text[:400]}")
         sys.exit(1)
 
-    added = list(new_properties.keys())
-    print(f"Done. Columns added/confirmed: {', '.join(added)}")
+    print("Done.")
+    print("  Removed:  Rank, Airline, Currency")
+    print("  Kept/set: Route, Price, Stops, Duration, Reason")
+    print()
+    print("Note: drag 'Route' to the first column in Notion's UI —")
+    print("column order can't be set via the API.")
 
 
 if __name__ == "__main__":

@@ -38,7 +38,6 @@ def _build_page_payload(
     database_id: str,
 ) -> dict:
     """Build the Notion API payload for one offer (one database row)."""
-    # Collect unique airline names across all slices (preserving order)
     airlines = list(dict.fromkeys(
         a for sl in offer["slices"] for a in sl["airlines"]
     ))
@@ -47,17 +46,14 @@ def _build_page_payload(
     route = f"{origin} → {destination}"
     total_stops = sum(sl["stops"] for sl in offer["slices"])
     duration_str = _fmt_dur(offer["total_duration_minutes"])
+    price_str = f"{offer['currency']} {offer['price']:,.0f}"
 
     return {
         "parent": {"database_id": database_id},
         "properties": {
-            # Title is short and readable — rank + airline, no duplication of other columns
             "Name":     {"title":     _rich_text(f"#{offer['rank']} · {airlines_str}")},
-            "Rank":     {"number":    offer["rank"]},
-            "Airline":  {"rich_text": _rich_text(airlines_str)},
-            "Price":    {"number":    offer["price"]},
-            "Currency": {"rich_text": _rich_text(offer["currency"])},
             "Route":    {"rich_text": _rich_text(route)},
+            "Price":    {"rich_text": _rich_text(price_str)},
             "Stops":    {"number":    total_stops},
             "Duration": {"rich_text": _rich_text(duration_str)},
             "Reason":   {"rich_text": _rich_text(offer["reason"])},
