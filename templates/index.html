@@ -233,6 +233,30 @@
       display: none;
     }
 
+    /* Price comparison strip */
+    #price-compare {
+      padding: 10px 16px;
+      border-radius: var(--r-sm);
+      margin-bottom: 14px;
+      font-size: 0.83rem;
+      display: none;
+    }
+    #price-compare.down {
+      background: rgba(13,214,120,0.08);
+      border: 1px solid rgba(13,214,120,0.22);
+      color: var(--green);
+    }
+    #price-compare.up {
+      background: rgba(255,140,66,0.09);
+      border: 1px solid rgba(255,140,66,0.25);
+      color: var(--orange);
+    }
+    #price-compare.same {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-2);
+    }
+
     /* Summary strip */
     #summary {
       background: var(--surface);
@@ -536,6 +560,7 @@
     <div id="status"><div class="spinner"></div><span id="status-text"></span></div>
     <div id="error"></div>
     <div id="sandbox-note"></div>
+    <div id="price-compare"></div>
     <div id="summary"></div>
     <div id="results"></div>
     <div id="notion-bar">
@@ -644,6 +669,7 @@
     // Stores the most recent completed search so the Notion button can re-use it
     let lastSearch = null;
 
+    const priceCompareEl = document.getElementById('price-compare');
     const notionBar  = document.getElementById('notion-bar');
     const notionBtn  = document.getElementById('notion-btn');
     const notionFb   = document.getElementById('notion-feedback');
@@ -694,14 +720,16 @@
       const depart_date = document.getElementById('depart').value;
       const return_date = document.getElementById('return-date').value || null;
 
-      errorEl.style.display   = 'none';
-      sandboxEl.style.display = 'none';
-      summaryEl.style.display = 'none';
-      resultsEl.style.display = 'none';
-      resultsEl.innerHTML = '';
+      errorEl.style.display      = 'none';
+      sandboxEl.style.display    = 'none';
+      priceCompareEl.style.display = 'none';
+      priceCompareEl.className   = '';
+      summaryEl.style.display    = 'none';
+      resultsEl.style.display    = 'none';
+      resultsEl.innerHTML        = '';
       notionBar.classList.remove('visible');
       notionFb.textContent = '';
-      notionFb.className = '';
+      notionFb.className   = '';
       lastSearch = null;
 
       statusEl.classList.add('loading');
@@ -751,6 +779,23 @@
           `Cheapest: ${cur} ${cheapest.price.toLocaleString()} (${cheapest.slices[0].airlines[0]}, ${dirLabel(cheapest)})` +
           `&emsp;Fastest: ${fmtDur(fastest.total_duration_minutes)} (${fastest.slices[0].airlines[0]}, ${dirLabel(fastest)})`;
         summaryEl.style.display = 'block';
+
+        if (data.price_comparison) {
+          const pc = data.price_comparison;
+          const cur = pc.currency;
+          const sign = pc.direction === 'up' ? '+' : pc.direction === 'down' ? '−' : '';
+          const arrow = pc.direction === 'up' ? '↑' : pc.direction === 'down' ? '↓' : '';
+          let msg;
+          if (pc.direction === 'same') {
+            msg = `Last searched ${pc.previous_date} · #1 was ${cur} ${pc.previous_price.toLocaleString()} — same price now`;
+          } else {
+            msg = `Last searched ${pc.previous_date} · #1 was ${cur} ${pc.previous_price.toLocaleString()}. ` +
+                  `Now ${cur} ${pc.current_price.toLocaleString()} — ${pc.direction} ${cur} ${Math.abs(pc.delta).toLocaleString()} (${sign}${Math.abs(pc.delta_pct)}%) ${arrow}`;
+          }
+          priceCompareEl.textContent = msg;
+          priceCompareEl.className = pc.direction;
+          priceCompareEl.style.display = 'block';
+        }
 
         const isRT = offers[0].slices.length > 1;
         resultsEl.innerHTML = offers.map(o => renderOffer(o, isRT)).join('');

@@ -8,7 +8,7 @@ import os
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
 from flights import SliceInfo, find_best_flights
-from notion_client import export_offers_to_notion
+from notion_client import export_offers_to_notion, get_previous_best_price
 
 app = Flask(__name__)
 # Signs the session cookie — set a strong random string as SECRET_KEY in production
@@ -108,10 +108,33 @@ def search():
         for i, s in enumerate(result.scored_offers)
     ]
 
+    # Check Notion for a previous #1 price on this same route+dates.
+    # Wrapped in try/except so a Notion outage never breaks the search itself.
+    price_comparison = None
+    try:
+        previous = get_previous_best_price(origin, destination, depart_date, return_date)
+        if previous and result.scored_offers:
+            current_price = result.scored_offers[0].offer.price
+            currency = result.scored_offers[0].offer.currency
+            delta = round(current_price - previous["price"])
+            delta_pct = round((delta / previous["price"]) * 100, 1) if previous["price"] else 0
+            price_comparison = {
+                "previous_price": previous["price"],
+                "previous_date": previous["date"],
+                "current_price": round(current_price),
+                "delta": delta,
+                "delta_pct": delta_pct,
+                "direction": "up" if delta > 0 else "down" if delta < 0 else "same",
+                "currency": currency,
+            }
+    except Exception:
+        pass  # comparison is optional; silently skip if anything goes wrong
+
     return jsonify({
         "offers": offers,
         "sandbox_filtered": result.sandbox_filtered,
         "codeshares_removed": result.codeshares_removed,
+        "price_comparison": price_comparison,
     })
 
 

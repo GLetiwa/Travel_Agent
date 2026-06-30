@@ -120,3 +120,77 @@ def export_offers_to_notion(
             )
 
     return len(top5)
+
+
+def get_previous_best_price(
+    origin: str,
+    destination: str,
+    depart_date: str,
+    return_date: Optional[str] = None,
+) -> Optional[dict]:
+    """Query Notion for the most recent #1 offer from a matching past search.
+
+    Matches on route + depart/return dates — the same key used in Search Route+Dates.
+    Returns {"price": float, "date": str, "currency": str} or None if no match
+    or if Notion is unavailable. Never raises — callers treat this as optional.
+    """
+    load_dotenv()
+    api_key = os.getenv("NOTION_API_KEY")
+    database_id = os.getenv("NOTION_DATABASE_ID")
+
+    if not api_key or not database_id:
+        return None
+
+    route_dates = f"{origin}→{destination}, depart {depart_date}"
+    if return_date:
+        route_dates += f" / return {return_date}"
+
+    try:
+        resp = requests.post(
+            f"{NOTION_API_BASE}/databases/{database_id}/query",
+            headers=_notion_headers(api_key),
+            json={
+                "filter": {
+                    "and": [
+                        {
+                            "property": "Search Route+Dates",
+                            "rich_text": {"equals": route_dates},
+                        },
+                        {
+                            # Name is the title property — "#1 · Airline"
+                            "property": "Name",
+                            "title": {"starts_with": "#1 ·"},
+                        },
+                    ]
+                },
+                "sorts": [{"property": "Search Date", "direction": "descending"}],
+                "page_size": 1,
+            },
+            timeout=10,
+        )
+    except Exception:
+        return None
+
+    if not resp.ok:
+        return None
+
+    results = resp.json().get("results", [])
+    if not results:
+        return None
+
+    props = results[0]["properties"]
+    price_rt = props.get("Price", {}).get("rich_text", [])
+    date_obj = props.get("Search Date", {}).get("date")
+
+    if not price_rt or not date_obj:
+        return None
+
+    try:
+        # Price is stored as "USD 512" — split to get currency and numeric parts
+        parts = price_rt[0]["plain_text"].split()
+        currency = parts[0]
+        numeric = float(parts[-1].replace(",", ""))
+    except (ValueError, IndexError):
+        return None
+
+    return {"price": numeric, "currency": currency, "date": date_obj["start"]}
