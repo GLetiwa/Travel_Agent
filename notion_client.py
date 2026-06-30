@@ -26,23 +26,15 @@ def _fmt_dur(mins: int) -> str:
     return f"{mins // 60}h {mins % 60:02d}m"
 
 
-def _para(text: str) -> dict:
-    """Build a Notion paragraph block from a plain text string."""
-    return {
-        "object": "block",
-        "type": "paragraph",
-        "paragraph": {
-            "rich_text": [{"type": "text", "text": {"content": text}}]
-        },
-    }
+def _rich_text(value: str) -> list:
+    """Notion's rich_text property format wraps a string in a list."""
+    return [{"text": {"content": value}}]
 
 
 def _build_page_payload(
     offer: dict,
     origin: str,
     destination: str,
-    depart_date: str,
-    return_date: Optional[str],
     database_id: str,
 ) -> dict:
     """Build the Notion API payload for one offer (one database row)."""
@@ -52,34 +44,24 @@ def _build_page_payload(
     ))
     airlines_str = ", ".join(airlines)
 
-    price_str = f"{offer['currency']} {offer['price']:,.0f}"
     route = f"{origin} → {destination}"
-    dates = depart_date + (f" / {return_date}" if return_date else "")
-
-    is_direct = all(sl["stops"] == 0 for sl in offer["slices"])
-    stops_str = "Direct" if is_direct else f"{offer['slices'][0]['stops']} stop(s)"
+    total_stops = sum(sl["stops"] for sl in offer["slices"])
     duration_str = _fmt_dur(offer["total_duration_minutes"])
-
-    # Row title: rank + airline + price + route — scannable at a glance
-    title = f"#{offer['rank']} · {airlines_str} · {price_str} · {route}"
-
-    body_lines = [
-        f"Route: {route}  |  Dates: {dates}",
-        f"Stops: {stops_str}  |  Duration: {duration_str}",
-        f"Reason: {offer['reason']}",
-    ]
-    if offer.get("flags"):
-        body_lines.append("Flags: " + "; ".join(offer["flags"]))
 
     return {
         "parent": {"database_id": database_id},
         "properties": {
-            # "Name" is the default title property present in every Notion database
-            "Name": {
-                "title": [{"text": {"content": title}}]
-            }
+            # Title is short and readable — rank + airline, no duplication of other columns
+            "Name":     {"title":     _rich_text(f"#{offer['rank']} · {airlines_str}")},
+            "Rank":     {"number":    offer["rank"]},
+            "Airline":  {"rich_text": _rich_text(airlines_str)},
+            "Price":    {"number":    offer["price"]},
+            "Currency": {"rich_text": _rich_text(offer["currency"])},
+            "Route":    {"rich_text": _rich_text(route)},
+            "Stops":    {"number":    total_stops},
+            "Duration": {"rich_text": _rich_text(duration_str)},
+            "Reason":   {"rich_text": _rich_text(offer["reason"])},
         },
-        "children": [_para(line) for line in body_lines],
     }
 
 
@@ -91,6 +73,9 @@ def export_offers_to_notion(
     return_date: Optional[str] = None,
 ) -> int:
     """Export the top 5 offers to the configured Notion database.
+
+    Rows are inserted in reverse rank order (5 → 1) so that Notion's
+    default newest-first display shows rank #1 at the top.
 
     Returns the number of rows created.
     Raises RuntimeError if config is missing or any Notion API call fails.
@@ -109,10 +94,10 @@ def export_offers_to_notion(
     headers = _notion_headers(api_key)
     url = f"{NOTION_API_BASE}/pages"
 
-    for offer in top5:
-        payload = _build_page_payload(
-            offer, origin, destination, depart_date, return_date, database_id
-        )
+    # Insert lowest-ranked first so that Notion's newest-first default
+    # display puts rank #1 at the top without requiring any manual sorting.
+    for offer in reversed(top5):
+        payload = _build_page_payload(offer, origin, destination, database_id)
         resp = requests.post(url, headers=headers, json=payload, timeout=15)
         if not resp.ok:
             # Surface enough detail to distinguish a missing-share error from
