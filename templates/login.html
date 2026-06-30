@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flight Search — Sign In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg:        #0b0f1a;
+      --surface:   #121828;
+      --card:      #161d2f;
+      --border:    rgba(255,255,255,0.07);
+      --border-hi: rgba(255,255,255,0.13);
+      --text:      #eef2ff;
+      --text-2:    #8892b0;
+      --text-3:    #3d4a63;
+      --accent:    #6c63ff;
+      --accent-hi: #9b95ff;
+      --red:       #ff5a5a;
+      --r-sm: 8px; --r-md: 14px; --r-lg: 22px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background-image: radial-gradient(rgba(108,99,255,0.08) 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+
+    .login-wrap {
+      width: 100%;
+      max-width: 380px;
+    }
+
+    /* Header */
+    .login-header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .logo-ring {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(108,99,255,0.25), rgba(139,92,246,0.15));
+      border: 1px solid rgba(108,99,255,0.35);
+      font-size: 1.4rem;
+      margin-bottom: 16px;
+      box-shadow: 0 0 28px rgba(108,99,255,0.2);
+    }
+    .login-header h1 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      background: linear-gradient(140deg, #eef2ff 20%, #8892b0 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 6px;
+    }
+    .login-header p {
+      font-size: 0.8rem;
+      color: var(--text-2);
+    }
+
+    /* Card */
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border-hi);
+      border-radius: var(--r-lg);
+      padding: 28px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04) inset;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-bottom: 18px;
+    }
+    .field label {
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--text-2);
+    }
+    .field input {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 500;
+      padding: 10px 14px;
+      border-radius: var(--r-sm);
+      outline: none;
+      transition: border-color 0.18s, box-shadow 0.18s;
+      width: 100%;
+    }
+    .field input::placeholder { color: var(--text-3); font-weight: 400; }
+    .field input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(108,99,255,0.18);
+    }
+    .field input.error-input {
+      border-color: rgba(255,90,90,0.5);
+    }
+    .field input.error-input:focus {
+      box-shadow: 0 0 0 3px rgba(255,90,90,0.15);
+    }
+
+    .error-msg {
+      background: rgba(255,90,90,0.09);
+      border: 1px solid rgba(255,90,90,0.28);
+      color: #ff8888;
+      padding: 10px 14px;
+      border-radius: var(--r-sm);
+      font-size: 0.82rem;
+      margin-bottom: 16px;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 13px;
+      font-family: inherit;
+      font-size: 0.93rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, #6c63ff 0%, #8b5cf6 100%);
+      color: #fff;
+      border: none;
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      transition: opacity 0.18s, transform 0.1s, box-shadow 0.18s;
+      box-shadow: 0 4px 18px rgba(108,99,255,0.35);
+    }
+    .submit-btn:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 24px rgba(108,99,255,0.45);
+    }
+    .submit-btn:active { transform: translateY(0); }
+  </style>
+</head>
+<body>
+
+  <div class="login-wrap">
+    <div class="login-header">
+      <div class="logo-ring">✈</div>
+      <h1>Flight Search</h1>
+      <p>Enter the password to continue</p>
+    </div>
+
+    <div class="login-card">
+      {% if error %}
+        <div class="error-msg">{{ error }}</div>
+      {% endif %}
+
+      <form method="POST" action="/login">
+        <div class="field">
+          <label for="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            placeholder="••••••••"
+            autocomplete="current-password"
+            autofocus
+            {% if error %}class="error-input"{% endif %}
+            required
+          >
+        </div>
+        <button type="submit" class="submit-btn">Continue</button>
+      </form>
+    </div>
+  </div>
+
+</body>
+</html>

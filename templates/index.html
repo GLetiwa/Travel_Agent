@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flight Search</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+
+      --bg:          #0b0f1a;
+      --surface:     #121828;
+      --card:        #161d2f;
+      --card-hover:  #1b2338;
+      --border:      rgba(255,255,255,0.07);
+      --border-hi:   rgba(255,255,255,0.13);
+
+      --text:        #eef2ff;
+      --text-2:      #8892b0;
+      --text-3:      #3d4a63;
+
+      --accent:      #6c63ff;
+      --accent-hi:   #9b95ff;
+      --gold:        #f0b429;
+      --green:       #0dd678;
+      --orange:      #ff8c42;
+      --red:         #ff5a5a;
+
+      --t1-bg:  rgba(126,232,250,0.10); --t1-br: rgba(126,232,250,0.28); --t1-tx: #7ee8fa;
+      --t2-bg:  rgba(128,255,158,0.08); --t2-br: rgba(128,255,158,0.22); --t2-tx: #80ff9e;
+      --t3-bg:  rgba(136,146,176,0.10); --t3-br: rgba(136,146,176,0.22); --t3-tx: #8892b0;
+
+      --r-sm: 8px; --r-md: 14px; --r-lg: 22px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      /* subtle dot grid */
+      background-image: radial-gradient(rgba(108,99,255,0.08) 1px, transparent 1px);
+      background-size: 28px 28px;
+      padding-bottom: 100px;
+    }
+
+    /* ───── Header ───── */
+    .page-header {
+      padding: 56px 24px 40px;
+      text-align: center;
+    }
+    .logo-ring {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(108,99,255,0.25), rgba(139,92,246,0.15));
+      border: 1px solid rgba(108,99,255,0.35);
+      font-size: 1.4rem;
+      margin-bottom: 18px;
+      box-shadow: 0 0 28px rgba(108,99,255,0.2);
+    }
+    .page-header h1 {
+      font-size: 2.1rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      background: linear-gradient(140deg, #eef2ff 20%, #8892b0 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+    .page-header p {
+      font-size: 0.875rem;
+      color: var(--text-2);
+      letter-spacing: 0.01em;
+    }
+
+    /* ───── Search card ───── */
+    .search-wrap {
+      max-width: 660px;
+      margin: 0 auto 44px;
+      padding: 0 20px;
+    }
+    .search-card {
+      background: var(--surface);
+      border: 1px solid var(--border-hi);
+      border-radius: var(--r-lg);
+      padding: 28px 28px 24px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04) inset;
+    }
+
+    .route-row {
+      display: grid;
+      grid-template-columns: 1fr 36px 1fr;
+      gap: 10px;
+      align-items: end;
+      margin-bottom: 14px;
+    }
+    .route-sep {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-bottom: 4px;
+      color: var(--accent);
+      font-size: 1.1rem;
+      opacity: 0.75;
+    }
+    .date-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label {
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--text-2);
+    }
+    .field input {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 500;
+      padding: 10px 14px;
+      border-radius: var(--r-sm);
+      outline: none;
+      transition: border-color 0.18s, box-shadow 0.18s;
+    }
+    .field input::placeholder { color: var(--text-3); font-weight: 400; }
+    .field input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(108,99,255,0.18);
+    }
+    .field input[type="text"] {
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 1.05rem;
+      font-weight: 600;
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(0.55) sepia(0.2);
+      cursor: pointer;
+    }
+
+    .search-btn {
+      width: 100%;
+      padding: 13px;
+      font-family: inherit;
+      font-size: 0.93rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, #6c63ff 0%, #8b5cf6 100%);
+      color: #fff;
+      border: none;
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      transition: opacity 0.18s, transform 0.1s, box-shadow 0.18s;
+      box-shadow: 0 4px 18px rgba(108,99,255,0.35);
+    }
+    .search-btn:hover:not(:disabled) {
+      opacity: 0.9;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 24px rgba(108,99,255,0.45);
+    }
+    .search-btn:active:not(:disabled) { transform: translateY(0); }
+    .search-btn:disabled { opacity: 0.35; cursor: default; box-shadow: none; transform: none; }
+
+    /* ───── Results area ───── */
+    .results-wrap {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    /* Loading */
+    #status {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 28px;
+      margin-bottom: 20px;
+      color: var(--text-2);
+      font-size: 0.875rem;
+    }
+    .spinner {
+      width: 17px; height: 17px;
+      border: 2px solid rgba(108,99,255,0.25);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+      flex-shrink: 0;
+      display: none;
+    }
+    #status.loading .spinner { display: block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Error */
+    #error {
+      background: rgba(255,90,90,0.09);
+      border: 1px solid rgba(255,90,90,0.28);
+      color: #ff8888;
+      padding: 12px 16px;
+      border-radius: var(--r-sm);
+      margin-bottom: 18px;
+      font-size: 0.875rem;
+      display: none;
+    }
+
+    /* Sandbox note */
+    #sandbox-note {
+      background: rgba(255,140,66,0.09);
+      border: 1px solid rgba(255,140,66,0.25);
+      color: var(--orange);
+      padding: 10px 14px;
+      border-radius: var(--r-sm);
+      margin-bottom: 16px;
+      font-size: 0.8rem;
+      display: none;
+    }
+
+    /* Summary strip */
+    #summary {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 13px 18px;
+      margin-bottom: 24px;
+      font-size: 0.83rem;
+      color: var(--text-2);
+      line-height: 1.75;
+      display: none;
+    }
+    #summary strong { color: var(--text); font-weight: 600; }
+
+    /* ───── Offer cards ───── */
+    #results { display: none; }
+
+    .offer {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 20px 22px 18px;
+      margin-bottom: 10px;
+      transition: background 0.18s, border-color 0.18s;
+      animation: fadeUp 0.32s ease both;
+    }
+    .offer:hover { background: var(--card-hover); border-color: var(--border-hi); }
+
+    .offer.top-pick {
+      border-color: rgba(240,180,41,0.45);
+      background: linear-gradient(160deg, #1b1e35 0%, #181c2e 100%);
+      box-shadow: 0 0 32px rgba(240,180,41,0.12), 0 6px 28px rgba(0,0,0,0.45);
+    }
+    .offer.top-pick:hover { border-color: rgba(240,180,41,0.65); }
+
+    .offer:nth-child(1) { animation-delay:   0ms; }
+    .offer:nth-child(2) { animation-delay:  55ms; }
+    .offer:nth-child(3) { animation-delay: 110ms; }
+    .offer:nth-child(4) { animation-delay: 160ms; }
+    .offer:nth-child(n+5){ animation-delay: 200ms; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Card header row */
+    .card-head {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 16px;
+    }
+    .rank-badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border-hi);
+      color: var(--text-2);
+      white-space: nowrap;
+    }
+    .rank-badge.top {
+      background: rgba(240,180,41,0.12);
+      border-color: rgba(240,180,41,0.45);
+      color: var(--gold);
+    }
+    .tier-badge {
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 3px 9px;
+      border-radius: 20px;
+    }
+    .tier-1 { background: var(--t1-bg); border: 1px solid var(--t1-br); color: var(--t1-tx); }
+    .tier-2 { background: var(--t2-bg); border: 1px solid var(--t2-br); color: var(--t2-tx); }
+    .tier-3 { background: var(--t3-bg); border: 1px solid var(--t3-br); color: var(--t3-tx); }
+
+    .card-spacer { flex: 1; }
+
+    .card-price {
+      font-size: 1.4rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+    .offer.top-pick .card-price { color: var(--gold); }
+
+    /* Slices */
+    .slice-block { }
+    .slice-block + .slice-block {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .slice-dir {
+      font-size: 0.63rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-3);
+      margin-bottom: 9px;
+    }
+
+    /* Flight timeline */
+    .flight-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 16px;
+    }
+    .ep-time {
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+    .ep-time sup {
+      font-size: 0.42em;
+      font-weight: 700;
+      color: var(--orange);
+      vertical-align: super;
+      margin-left: 1px;
+    }
+    .ep-code {
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-2);
+      margin-top: 3px;
+    }
+    .ep-right { text-align: right; }
+
+    /* Center column */
+    .flight-mid {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+    }
+    .track {
+      width: 100%;
+      display: flex;
+      align-items: center;
+    }
+    .track-line {
+      flex: 1;
+      height: 1px;
+      background: var(--border-hi);
+    }
+    .track-plane {
+      font-size: 0.85rem;
+      color: var(--accent);
+      padding: 0 5px;
+      opacity: 0.8;
+    }
+    .mid-dur {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-2);
+    }
+    .stops-pill {
+      display: inline-block;
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      padding: 2px 8px;
+      border-radius: 20px;
+    }
+    .stops-pill.direct   { background: rgba(13,214,120,0.12); color: var(--green); }
+    .stops-pill.indirect { background: rgba(255,140,66,0.12); color: var(--orange); }
+    .mid-airline {
+      font-size: 0.7rem;
+      color: var(--text-3);
+      text-align: center;
+    }
+
+    /* Layover line */
+    .layover-line {
+      margin-top: 7px;
+      font-size: 0.77rem;
+      color: var(--text-3);
+      padding-left: 2px;
+    }
+    .layover-line::before { content: '↳ '; }
+
+    /* Card footer */
+    .card-foot {
+      margin-top: 13px;
+      padding-top: 11px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 18px;
+      align-items: flex-start;
+    }
+    .foot-item {
+      font-size: 0.79rem;
+      color: var(--text-2);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .foot-item .ic { font-size: 0.85em; opacity: 0.8; }
+    .foot-reason {
+      width: 100%;
+      font-size: 0.79rem;
+      color: var(--accent-hi);
+      font-style: italic;
+    }
+    .foot-reason::before { content: '→ '; font-style: normal; }
+    .foot-flag {
+      width: 100%;
+      font-size: 0.77rem;
+      color: var(--orange);
+    }
+    .foot-flag::before { content: '⚠ '; }
+  </style>
+</head>
+<body>
+
+  <header class="page-header">
+    <div class="logo-ring">✈</div>
+    <h1>Flight Search</h1>
+    <p>Business class · Ranked by airline &amp; directness</p>
+  </header>
+
+  <div class="search-wrap">
+    <div class="search-card">
+      <form id="search-form">
+        <div class="route-row">
+          <div class="field">
+            <label for="origin">From</label>
+            <input id="origin" type="text" placeholder="NBO" maxlength="3" required autocomplete="off">
+          </div>
+          <div class="route-sep">→</div>
+          <div class="field">
+            <label for="destination">To</label>
+            <input id="destination" type="text" placeholder="LHR" maxlength="3" required autocomplete="off">
+          </div>
+        </div>
+        <div class="date-row">
+          <div class="field">
+            <label for="depart">Depart</label>
+            <input id="depart" type="date" required>
+          </div>
+          <div class="field">
+            <label for="return-date">Return (optional)</label>
+            <input id="return-date" type="date">
+          </div>
+        </div>
+        <button type="submit" id="submit-btn" class="search-btn">Search Flights</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="results-wrap">
+    <div id="status"><div class="spinner"></div><span id="status-text"></span></div>
+    <div id="error"></div>
+    <div id="sandbox-note"></div>
+    <div id="summary"></div>
+    <div id="results"></div>
+  </div>
+
+  <script>
+    function fmtDur(mins) {
+      return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
+    }
+
+    function fmtArrives(depIso, arrIso) {
+      const depDate = depIso.slice(0, 10), arrDate = arrIso.slice(0, 10);
+      const time = arrIso.slice(11, 16);
+      if (arrDate > depDate) {
+        const diff = Math.round(
+          (new Date(arrDate + 'T00:00') - new Date(depDate + 'T00:00')) / 86400000
+        );
+        return `${time}<sup>+${diff}</sup>`;
+      }
+      return time;
+    }
+
+    const TIER1 = ['United Airlines', 'American Airlines'];
+    const TIER2 = ['British Airways', 'Air France'];
+
+    function tierInfo(airlines) {
+      if (airlines.some(a => TIER1.includes(a))) return { cls: 'tier-1', label: 'Tier 1' };
+      if (airlines.some(a => TIER2.includes(a))) return { cls: 'tier-2', label: 'Tier 2' };
+      return { cls: 'tier-3', label: 'Tier 3' };
+    }
+
+    function renderOffer(o, isRT) {
+      const isTop = o.rank === 1;
+      const allAirlines = o.slices.flatMap(sl => sl.airlines);
+      const tier = tierInfo(allAirlines);
+
+      const slicesHtml = o.slices.map((sl, i) => {
+        const dirLabel = isRT ? (i === 0 ? 'Outbound' : 'Return') : null;
+        const stops = sl.stops === 0 ? 'direct' : `${sl.stops} stop${sl.stops > 1 ? 's' : ''}`;
+        const stopCls = sl.stops === 0 ? 'direct' : 'indirect';
+        const dep = sl.departs_at.slice(11, 16);
+        const arr = fmtArrives(sl.departs_at, sl.arrives_at);
+
+        const layoversHtml = sl.layovers.map(l =>
+          `<div class="layover-line">${l.airport} · ${fmtDur(l.duration_minutes)} layover</div>`
+        ).join('');
+
+        return `
+          <div class="slice-block">
+            ${dirLabel ? `<div class="slice-dir">${dirLabel}</div>` : ''}
+            <div class="flight-row">
+              <div>
+                <div class="ep-time">${dep}</div>
+                <div class="ep-code">${sl.origin}</div>
+              </div>
+              <div class="flight-mid">
+                <div class="track">
+                  <div class="track-line"></div>
+                  <span class="track-plane">✈</span>
+                  <div class="track-line"></div>
+                </div>
+                <div class="mid-dur">${fmtDur(sl.duration_minutes)} <span class="stops-pill ${stopCls}">${stops}</span></div>
+                <div class="mid-airline">${sl.airlines.join(', ')}</div>
+              </div>
+              <div class="ep-right">
+                <div class="ep-time">${arr}</div>
+                <div class="ep-code">${sl.destination}</div>
+              </div>
+            </div>
+            ${layoversHtml}
+          </div>`;
+      }).join('');
+
+      const bagParts = [];
+      if (o.checked_bags)  bagParts.push(`${o.checked_bags} checked`);
+      if (o.carry_on_bags) bagParts.push(`${o.carry_on_bags} carry-on`);
+      const bagsHtml = bagParts.length
+        ? `<div class="foot-item"><span class="ic">🧳</span>${bagParts.join(', ')}</div>` : '';
+
+      const flagsHtml = o.flags.map(f => `<div class="foot-flag">${f}</div>`).join('');
+
+      const rankLabel = isTop ? '★ #1 · Best Match' : `#${o.rank}`;
+      const priceStr  = o.price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+      return `
+        <div class="offer${isTop ? ' top-pick' : ''}">
+          <div class="card-head">
+            <span class="rank-badge${isTop ? ' top' : ''}">${rankLabel}</span>
+            <span class="tier-badge ${tier.cls}">${tier.label}</span>
+            <div class="card-spacer"></div>
+            <span class="card-price">${o.currency} ${priceStr}</span>
+          </div>
+          ${slicesHtml}
+          <div class="card-foot">
+            <div class="foot-item"><span class="ic">⏱</span>${fmtDur(o.total_duration_minutes)} total</div>
+            ${bagsHtml}
+            <div class="foot-reason">${o.reason}</div>
+            ${flagsHtml}
+          </div>
+        </div>`;
+    }
+
+    const form      = document.getElementById('search-form');
+    const statusEl  = document.getElementById('status');
+    const statusTxt = document.getElementById('status-text');
+    const errorEl   = document.getElementById('error');
+    const sandboxEl = document.getElementById('sandbox-note');
+    const summaryEl = document.getElementById('summary');
+    const resultsEl = document.getElementById('results');
+    const submitBtn = document.getElementById('submit-btn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const origin      = document.getElementById('origin').value.trim().toUpperCase();
+      const destination = document.getElementById('destination').value.trim().toUpperCase();
+      const depart_date = document.getElementById('depart').value;
+      const return_date = document.getElementById('return-date').value || null;
+
+      errorEl.style.display   = 'none';
+      sandboxEl.style.display = 'none';
+      summaryEl.style.display = 'none';
+      resultsEl.style.display = 'none';
+      resultsEl.innerHTML = '';
+
+      statusEl.classList.add('loading');
+      statusTxt.textContent = `Searching ${origin} → ${destination}…`;
+      submitBtn.disabled = true;
+
+      try {
+        const resp = await fetch('/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ origin, destination, depart_date, return_date }),
+        });
+
+        const data = await resp.json();
+        statusEl.classList.remove('loading');
+        statusTxt.textContent = '';
+
+        if (!resp.ok) {
+          errorEl.textContent = data.error || 'Search failed — please try again.';
+          errorEl.style.display = 'block';
+          return;
+        }
+
+        const offers = data.offers;
+        if (!offers || offers.length === 0) {
+          errorEl.textContent = 'No results found for this route and date. Try different dates.';
+          errorEl.style.display = 'block';
+          return;
+        }
+
+        if (data.sandbox_filtered > 0) {
+          sandboxEl.textContent =
+            `${data.sandbox_filtered} sandbox offer(s) filtered out (Duffel Airways / ZZ — not real flights).`;
+          sandboxEl.style.display = 'block';
+        }
+
+        const directCount = offers.filter(o => o.slices.every(sl => sl.stops === 0)).length;
+        const cheapest = offers.reduce((a, b) => a.price < b.price ? a : b);
+        const fastest  = offers.reduce((a, b) => a.total_duration_minutes < b.total_duration_minutes ? a : b);
+        const cur = cheapest.currency;
+        const dirLabel = o => o.slices.every(sl => sl.stops === 0) ? 'direct' : 'with stops';
+        const dedupeNote = data.codeshares_removed > 0
+          ? ` · ${data.codeshares_removed} codeshare(s) hidden` : '';
+
+        summaryEl.innerHTML =
+          `<strong>${offers.length} option${offers.length !== 1 ? 's' : ''} found · ${directCount} direct${dedupeNote}</strong><br>` +
+          `Cheapest: ${cur} ${cheapest.price.toLocaleString()} (${cheapest.slices[0].airlines[0]}, ${dirLabel(cheapest)})` +
+          `&emsp;Fastest: ${fmtDur(fastest.total_duration_minutes)} (${fastest.slices[0].airlines[0]}, ${dirLabel(fastest)})`;
+        summaryEl.style.display = 'block';
+
+        const isRT = offers[0].slices.length > 1;
+        resultsEl.innerHTML = offers.map(o => renderOffer(o, isRT)).join('');
+        resultsEl.style.display = 'block';
+
+      } catch (err) {
+        statusEl.classList.remove('loading');
+        statusTxt.textContent = '';
+        errorEl.textContent = 'Network error — is the server running?';
+        errorEl.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
