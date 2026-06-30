@@ -7,7 +7,7 @@ import os
 
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
-from flights import SliceInfo, find_best_flights
+from flights import SliceInfo, find_best_flights, load_api_key, search_places
 from notion_client import export_offers_to_notion, get_previous_best_price
 
 app = Flask(__name__)
@@ -71,6 +71,19 @@ def _slice_to_dict(sl: SliceInfo) -> dict:
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/places")
+def places():
+    query = request.args.get("query", "").strip()
+    if len(query) < 2:
+        return jsonify({"suggestions": []})
+    try:
+        api_key = load_api_key()
+        results = search_places(api_key, query)
+    except RuntimeError as e:
+        return jsonify({"error": str(e), "suggestions": []}), 400
+    return jsonify({"suggestions": results[:8]})
 
 
 @app.route("/search", methods=["POST"])

@@ -364,6 +364,54 @@ def _search_flights(api_key: str, origin: str, destination: str,
     return _list_offers(api_key, offer_request_id)
 
 
+def search_places(api_key: str, query: str) -> list:
+    """Query Duffel's places/suggestions endpoint and return a flat list of airports.
+
+    Cities with multiple airports (e.g. London) are expanded so each airport
+    appears as its own entry. Results are deduplicated by IATA code since Duffel
+    sometimes returns the same airport as both a city child and a standalone entry.
+
+    Returns a list of dicts: {name, iata_code, city_name}.
+    """
+    url = f"{DUFFEL_BASE_URL}/places/suggestions"
+    response = requests.get(url, headers=_duffel_headers(api_key),
+                            params={"query": query}, timeout=10)
+
+    if not response.ok:
+        raise RuntimeError(
+            f"Places lookup failed: {response.status_code}\n{response.text}"
+        )
+
+    seen: set[str] = set()
+    results: list[dict] = []
+
+    for place in response.json().get("data", []):
+        ptype = place.get("type")
+
+        if ptype == "city":
+            # Expand city into its individual airports
+            for airport in (place.get("airports") or []):
+                code = airport.get("iata_code", "")
+                if code and code not in seen:
+                    seen.add(code)
+                    results.append({
+                        "name": airport.get("name", ""),
+                        "iata_code": code,
+                        "city_name": place.get("name", ""),
+                    })
+        elif ptype == "airport":
+            code = place.get("iata_code", "")
+            if code and code not in seen:
+                seen.add(code)
+                results.append({
+                    "name": place.get("name", ""),
+                    "iata_code": code,
+                    "city_name": place.get("city_name") or "",
+                })
+
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------

@@ -144,11 +144,53 @@
       border-color: var(--accent);
       box-shadow: 0 0 0 3px rgba(108,99,255,0.18);
     }
-    .field input[type="text"] {
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      font-size: 1.05rem;
-      font-weight: 600;
+    /* Typeahead suggestions dropdown */
+    .autocomplete-wrap { position: relative; }
+    .suggestions {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0; right: 0;
+      background: var(--card);
+      border: 1px solid var(--border-hi);
+      border-radius: var(--r-sm);
+      z-index: 200;
+      list-style: none;
+      max-height: 224px;
+      overflow-y: auto;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+    }
+    .suggestions[hidden] { display: none; }
+    .suggestions li {
+      padding: 9px 14px;
+      cursor: pointer;
+      font-size: 0.84rem;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+      transition: background 0.12s;
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+    }
+    .suggestions li:last-child { border-bottom: none; }
+    .suggestions li:hover,
+    .suggestions li.active { background: var(--card-hover); }
+    .sug-code {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: var(--accent-hi);
+      flex-shrink: 0;
+    }
+    .sug-name { flex: 1; }
+    .sug-city {
+      font-size: 0.75rem;
+      color: var(--text-2);
+      flex-shrink: 0;
+    }
+    .suggestions li.no-results {
+      color: var(--text-2);
+      font-style: italic;
+      cursor: default;
     }
     input[type="date"]::-webkit-calendar-picker-indicator {
       filter: invert(0.55) sepia(0.2);
@@ -531,14 +573,18 @@
     <div class="search-card">
       <form id="search-form">
         <div class="route-row">
-          <div class="field">
-            <label for="origin">From</label>
-            <input id="origin" type="text" placeholder="NBO" maxlength="3" required autocomplete="off">
+          <div class="field autocomplete-wrap">
+            <label for="origin-input">From</label>
+            <input id="origin-input" type="text" placeholder="City or airport code" required autocomplete="off">
+            <input id="origin" type="hidden">
+            <ul id="origin-suggestions" class="suggestions" hidden></ul>
           </div>
           <div class="route-sep">→</div>
-          <div class="field">
-            <label for="destination">To</label>
-            <input id="destination" type="text" placeholder="LHR" maxlength="3" required autocomplete="off">
+          <div class="field autocomplete-wrap">
+            <label for="destination-input">To</label>
+            <input id="destination-input" type="text" placeholder="City or airport code" required autocomplete="off">
+            <input id="destination" type="hidden">
+            <ul id="destination-suggestions" class="suggestions" hidden></ul>
           </div>
         </div>
         <div class="date-row">
@@ -666,7 +712,98 @@
         </div>`;
     }
 
+    // ---------------------------------------------------------------------------
+    // Typeahead
+    // ---------------------------------------------------------------------------
+
+    function setupTypeahead(textId, hiddenId, listId) {
+      const input   = document.getElementById(textId);
+      const hidden  = document.getElementById(hiddenId);
+      const sugList = document.getElementById(listId);
+      let timer, activeIdx = -1;
+
+      input.addEventListener('input', () => {
+        hidden.value = '';           // clear resolved code whenever user edits
+        clearTimeout(timer);
+        const q = input.value.trim();
+        if (q.length < 2) { close(); return; }
+        timer = setTimeout(() => load(q), 300);
+      });
+
+      async function load(q) {
+        try {
+          const resp = await fetch(`/places?query=${encodeURIComponent(q)}`);
+          const data = await resp.json();
+          render(data.suggestions || []);
+        } catch { close(); }
+      }
+
+      function render(items) {
+        sugList.innerHTML = '';
+        activeIdx = -1;
+        if (items.length === 0) {
+          const li = document.createElement('li');
+          li.className = 'no-results';
+          li.textContent = 'No airports found';
+          sugList.appendChild(li);
+        } else {
+          items.forEach(s => {
+            const li = document.createElement('li');
+            li.innerHTML =
+              `<span class="sug-code">${s.iata_code}</span>` +
+              `<span class="sug-name">${s.name}</span>` +
+              (s.city_name ? `<span class="sug-city">${s.city_name}</span>` : '');
+            li.addEventListener('mousedown', e => { e.preventDefault(); select(s); });
+            sugList.appendChild(li);
+          });
+        }
+        sugList.hidden = false;
+      }
+
+      function select(s) {
+        // Show a readable label; store the IATA code in the hidden input
+        input.value  = `${s.name} (${s.iata_code})`;
+        hidden.value = s.iata_code;
+        close();
+      }
+
+      function close() {
+        sugList.hidden = true;
+        sugList.innerHTML = '';
+        activeIdx = -1;
+      }
+
+      input.addEventListener('blur',  () => setTimeout(close, 150));
+      input.addEventListener('focus', () => {
+        if (input.value.trim().length >= 2 && !hidden.value) load(input.value.trim());
+      });
+
+      input.addEventListener('keydown', e => {
+        const items = [...sugList.querySelectorAll('li:not(.no-results)')];
+        if (sugList.hidden || !items.length) return;
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          activeIdx = Math.min(activeIdx + 1, items.length - 1);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          activeIdx = Math.max(activeIdx - 1, 0);
+        } else if (e.key === 'Enter' && activeIdx >= 0) {
+          e.preventDefault();
+          items[activeIdx].dispatchEvent(new MouseEvent('mousedown'));
+          return;
+        } else if (e.key === 'Escape') {
+          close(); return;
+        } else { return; }
+        items.forEach((li, i) => li.classList.toggle('active', i === activeIdx));
+      });
+    }
+
+    setupTypeahead('origin-input',      'origin',      'origin-suggestions');
+    setupTypeahead('destination-input', 'destination', 'destination-suggestions');
+
+    // ---------------------------------------------------------------------------
     // Stores the most recent completed search so the Notion button can re-use it
+    // ---------------------------------------------------------------------------
     let lastSearch = null;
 
     const priceCompareEl = document.getElementById('price-compare');
@@ -715,8 +852,10 @@
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
 
-      const origin      = document.getElementById('origin').value.trim().toUpperCase();
-      const destination = document.getElementById('destination').value.trim().toUpperCase();
+      // Use the hidden IATA code if a suggestion was selected; otherwise treat
+      // whatever the user typed as a raw IATA code (fallback for direct entry).
+      const origin      = (document.getElementById('origin').value      || document.getElementById('origin-input').value).trim().toUpperCase();
+      const destination = (document.getElementById('destination').value || document.getElementById('destination-input').value).trim().toUpperCase();
       const depart_date = document.getElementById('depart').value;
       const return_date = document.getElementById('return-date').value || null;
 
