@@ -8,6 +8,7 @@ import os
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
 from flights import SliceInfo, find_best_flights
+from notion_client import export_offers_to_notion
 
 app = Flask(__name__)
 # Signs the session cookie — set a strong random string as SECRET_KEY in production
@@ -112,6 +113,30 @@ def search():
         "sandbox_filtered": result.sandbox_filtered,
         "codeshares_removed": result.codeshares_removed,
     })
+
+
+@app.route("/export-notion", methods=["POST"])
+def export_notion():
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({"error": "Request body must be JSON."}), 400
+
+    offers = body.get("offers", [])
+    origin = body.get("origin", "").strip().upper()
+    destination = body.get("destination", "").strip().upper()
+    depart_date = body.get("depart_date", "").strip()
+    return_date_raw = body.get("return_date")
+    return_date = return_date_raw.strip() if return_date_raw else None
+
+    if not offers or not origin or not destination or not depart_date:
+        return jsonify({"error": "Missing required fields (offers, origin, destination, depart_date)."}), 400
+
+    try:
+        count = export_offers_to_notion(offers, origin, destination, depart_date, return_date)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 400
+
+    return jsonify({"success": True, "exported": count})
 
 
 if __name__ == "__main__":

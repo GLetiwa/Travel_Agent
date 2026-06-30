@@ -453,6 +453,46 @@
       color: var(--orange);
     }
     .foot-flag::before { content: '⚠ '; }
+
+    /* ───── Notion export bar ───── */
+    #notion-bar {
+      display: none;
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      display: none;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    #notion-bar.visible { display: flex; }
+
+    .notion-btn {
+      padding: 10px 20px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      border: 1px solid var(--border-hi);
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      transition: background 0.18s, border-color 0.18s, opacity 0.18s;
+      white-space: nowrap;
+    }
+    .notion-btn:hover:not(:disabled) {
+      background: rgba(255,255,255,0.09);
+      border-color: rgba(255,255,255,0.22);
+    }
+    .notion-btn:disabled { opacity: 0.35; cursor: default; }
+
+    #notion-feedback {
+      font-size: 0.82rem;
+      transition: opacity 0.3s;
+    }
+    #notion-feedback.ok   { color: var(--green); }
+    #notion-feedback.fail { color: var(--red); }
   </style>
 </head>
 <body>
@@ -498,6 +538,10 @@
     <div id="sandbox-note"></div>
     <div id="summary"></div>
     <div id="results"></div>
+    <div id="notion-bar">
+      <button class="notion-btn" id="notion-btn">Save top 5 to Notion</button>
+      <span id="notion-feedback"></span>
+    </div>
   </div>
 
   <script>
@@ -597,6 +641,41 @@
         </div>`;
     }
 
+    // Stores the most recent completed search so the Notion button can re-use it
+    let lastSearch = null;
+
+    const notionBar  = document.getElementById('notion-bar');
+    const notionBtn  = document.getElementById('notion-btn');
+    const notionFb   = document.getElementById('notion-feedback');
+
+    notionBtn.addEventListener('click', async () => {
+      if (!lastSearch) return;
+      notionBtn.disabled = true;
+      notionFb.textContent = 'Saving…';
+      notionFb.className = '';
+
+      try {
+        const resp = await fetch('/export-notion', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(lastSearch),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          notionFb.textContent = data.error || 'Export failed.';
+          notionFb.className = 'fail';
+        } else {
+          notionFb.textContent = `Saved ${data.exported} flight${data.exported !== 1 ? 's' : ''} to Notion ✓`;
+          notionFb.className = 'ok';
+        }
+      } catch {
+        notionFb.textContent = 'Network error — export failed.';
+        notionFb.className = 'fail';
+      } finally {
+        notionBtn.disabled = false;
+      }
+    });
+
     const form      = document.getElementById('search-form');
     const statusEl  = document.getElementById('status');
     const statusTxt = document.getElementById('status-text');
@@ -619,6 +698,10 @@
       summaryEl.style.display = 'none';
       resultsEl.style.display = 'none';
       resultsEl.innerHTML = '';
+      notionBar.classList.remove('visible');
+      notionFb.textContent = '';
+      notionFb.className = '';
+      lastSearch = null;
 
       statusEl.classList.add('loading');
       statusTxt.textContent = `Searching ${origin} → ${destination}…`;
@@ -671,6 +754,10 @@
         const isRT = offers[0].slices.length > 1;
         resultsEl.innerHTML = offers.map(o => renderOffer(o, isRT)).join('');
         resultsEl.style.display = 'block';
+
+        // Store for Notion export
+        lastSearch = { offers, origin, destination, depart_date, return_date };
+        notionBar.classList.add('visible');
 
       } catch (err) {
         statusEl.classList.remove('loading');
