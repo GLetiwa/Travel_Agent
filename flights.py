@@ -16,20 +16,16 @@ DUFFEL_BASE_URL = "https://api.duffel.com"
 DUFFEL_VERSION = "v2"
 SANDBOX_CARRIER_CODE = "ZZ"  # Duffel Airways test/demo airline — not a real flight option
 
-# Scoring weights — must sum to 1.0; raise WEIGHT_PRICE to favour cost more
-WEIGHT_PRICE = 0.60
-WEIGHT_DURATION = 0.40
+# Airline tier definitions — ranking priority: Tier 1 > Tier 2 > Tier 3 (everyone else)
+TIER1_AIRLINES = {"United Airlines", "American Airlines"}
+TIER2_AIRLINES = {"British Airways", "Air France"}
 
-# Penalty amounts subtracted from the 0–1 base score
-PENALTY_EXCESS_STOPS = 0.30   # per stop beyond MAX_PREFERRED_STOPS
-PENALTY_LONG_FLIGHT = 0.10    # when total duration exceeds MAX_PREFERRED_HOURS
-PENALTY_RED_EYE = 0.10        # red-eye departure, only when alternatives exist
+# Thresholds used only for display flags, not for ranking
+MAX_PREFERRED_STOPS = 1   # flag anything above this
+MAX_PREFERRED_HOURS = 12  # flag legs longer than this
+RED_EYE_END_HOUR = 6      # departure before 06:00 counts as red-eye
 
-MAX_PREFERRED_STOPS = 1       # flag (but don't exclude) anything above this
-MAX_PREFERRED_HOURS = 12      # flag flights longer than this
-RED_EYE_END_HOUR = 6          # departure before 06:00 counts as red-eye
-
-MAX_RESULTS_SHOWN = 10        # ranked results printed by CLI by default
+MAX_RESULTS_SHOWN = 10    # ranked results printed by CLI by default
 
 
 # ---------------------------------------------------------------------------
@@ -202,91 +198,80 @@ def _is_red_eye(offer: ParsedOffer) -> bool:
     return offer.slices[0].departs_at.hour < RED_EYE_END_HOUR
 
 
-def _score_offer(
-    offer: ParsedOffer,
-    min_price: float, max_price: float,
-    min_duration: int, max_duration: int,
-    any_non_red_eye: bool,
-) -> tuple[float, list[str]]:
-    """Return a (score, flags) pair for one offer.
+def _airline_tier(airlines: list[str]) -> int:
+    """Return the best tier (1, 2, or 3) represented in a list of airline names."""
+    if any(a in TIER1_AIRLINES for a in airlines):
+        return 1
+    if any(a in TIER2_AIRLINES for a in airlines):
+        return 2
+    return 3
 
-    Score is 0–1 before penalties; higher is better.
-    Normalising within the result set means the weights stay stable regardless
-    of absolute price levels.
-    """
-    price_range = max_price - min_price or 1.0
-    duration_range = max_duration - min_duration or 1.0
 
-    norm_price = 1.0 - (offer.price - min_price) / price_range
-    norm_duration = 1.0 - (offer.total_duration_minutes - min_duration) / duration_range
-    score = WEIGHT_PRICE * norm_price + WEIGHT_DURATION * norm_duration
-
+def _compute_flags(offer: ParsedOffer, any_non_red_eye: bool) -> list[str]:
+    """Return display-only warning flags. These do not affect ranking."""
     flags: list[str] = []
-
-    # Check each leg independently — preference is per-leg, not combined
     max_stops = max(s.stops for s in offer.slices)
     if max_stops > MAX_PREFERRED_STOPS:
-        score -= PENALTY_EXCESS_STOPS * (max_stops - MAX_PREFERRED_STOPS)
         flags.append(f"{max_stops} stop(s) on one leg — over preferred max of {MAX_PREFERRED_STOPS}")
-
     if any(s.duration_minutes > MAX_PREFERRED_HOURS * 60 for s in offer.slices):
-        score -= PENALTY_LONG_FLIGHT
         flags.append(f"over {MAX_PREFERRED_HOURS}h total travel time")
-
-    # Only penalise red-eye if there are other options — don't punish what can't be avoided
+    # Only flag red-eye when alternatives exist — don't penalise what can't be avoided
     if _is_red_eye(offer) and any_non_red_eye:
-        score -= PENALTY_RED_EYE
         flags.append("red-eye departure")
+    return flags
 
-    return score, flags
 
-
-def _reason(offer: ParsedOffer, cheapest_id: str, fastest_id: str) -> str:
-    """One-line label summarising why this offer ranks where it does."""
+def _reason(offer: ParsedOffer, cheapest_id: str) -> str:
+    """One-line label explaining why this offer ranked where it did."""
+    all_airlines = [a for sl in offer.slices for a in sl.airlines]
+    tier = _airline_tier(all_airlines)
     is_direct = all(sl.stops == 0 for sl in offer.slices)
-    cheapest = offer.offer_id == cheapest_id
-    fastest = offer.offer_id == fastest_id
+    is_cheapest = offer.offer_id == cheapest_id
 
-    if is_direct and cheapest:
-        return "cheapest direct flight"
-    if is_direct and fastest:
-        return "fastest direct flight"
-    if cheapest:
-        return "cheapest option (with stop(s))"
-    if fastest:
-        return "fastest itinerary"
-    if is_direct:
-        return "direct flight"
-    return "best balance of price and duration"
+    tier_label = {1: "Tier 1 airline", 2: "Tier 2 airline"}.get(tier)
+
+    parts: list[str] = []
+    if tier_label:
+        parts.append(tier_label)
+    parts.append("direct" if is_direct else "with stop(s)")
+    if is_cheapest:
+        parts.append("lowest price")
+
+    return " · ".join(parts)
 
 
 def score_offers(offers: list[ParsedOffer]) -> list[ScoredOffer]:
-    """Score and rank all parsed offers. Returns sorted list, best first."""
+    """Rank offers using a strict tiered/lexicographic sort.
+
+    Priority order (never blended into a single score):
+      1. Airline tier (Tier 1 > Tier 2 > Tier 3)
+      2. Directness within the same tier (direct always beats indirect)
+      3. Price within the same tier + directness (lower is better)
+    """
     if not offers:
         return []
 
-    prices = [o.price for o in offers]
-    durations = [o.total_duration_minutes for o in offers]
-    min_price, max_price = min(prices), max(prices)
-    min_duration, max_duration = min(durations), max(durations)
     any_non_red_eye = any(not _is_red_eye(o) for o in offers)
-
     cheapest_id = min(offers, key=lambda o: o.price).offer_id
-    fastest_id = min(offers, key=lambda o: o.total_duration_minutes).offer_id
 
     result: list[ScoredOffer] = []
     for o in offers:
-        raw_score, flags = _score_offer(
-            o, min_price, max_price, min_duration, max_duration, any_non_red_eye
-        )
+        flags = _compute_flags(o, any_non_red_eye)
         result.append(ScoredOffer(
             offer=o,
-            score=raw_score,
-            reason=_reason(o, cheapest_id, fastest_id),
+            score=0.0,  # not used for ranking — kept for API compatibility
+            reason=_reason(o, cheapest_id),
             flags=flags,
         ))
 
-    result.sort(key=lambda s: s.score, reverse=True)
+    def sort_key(s: ScoredOffer) -> tuple:
+        all_airlines = [a for sl in s.offer.slices for a in sl.airlines]
+        tier = _airline_tier(all_airlines)
+        # True sorts after False, so is_indirect=False (direct) ranks first
+        is_indirect = any(sl.stops > 0 for sl in s.offer.slices)
+        return (tier, is_indirect, s.offer.price)
+
+    result.sort(key=sort_key)
     return result
 
 
