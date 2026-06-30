@@ -34,18 +34,15 @@ def main() -> None:
     }
 
     properties = {
-        # Columns to remove (set to null deletes them)
-        "Rank":     None,
-        "Airline":  None,
-        "Currency": None,
-
-        # Columns to keep or create
-        # Price was previously a number — redefining as rich_text to include currency
-        "Route":    {"rich_text": {}},
-        "Price":    {"rich_text": {}},
-        "Stops":    {"number":    {"format": "number"}},
-        "Duration": {"rich_text": {}},
-        "Reason":   {"rich_text": {}},
+        # Core flight columns
+        "Route":              {"rich_text": {}},
+        "Price":              {"rich_text": {}},
+        "Stops":              {"number":    {"format": "number"}},
+        "Duration":           {"rich_text": {}},
+        "Reason":             {"rich_text": {}},
+        # Search identity columns (Phase 5A) — lets you trace which search produced each row
+        "Search Date":        {"date":      {}},
+        "Search Route+Dates": {"rich_text": {}},
     }
 
     print(f"Patching database {database_id} …")
@@ -60,11 +57,11 @@ def main() -> None:
         print(f"ERROR {resp.status_code}: {resp.text[:400]}")
         sys.exit(1)
 
-    print("Done.")
-    print("  Removed:  Rank, Airline, Currency")
-    print("  Kept/set: Route, Price, Stops, Duration, Reason")
+    print("Done. Columns confirmed:")
+    for name in properties:
+        print(f"  • {name}")
     print()
-    print("Note: drag 'Route' to the first column in Notion's UI —")
+    print("Tip: drag 'Route' to the first column in Notion's UI if needed —")
     print("column order can't be set via the API.")
 
 

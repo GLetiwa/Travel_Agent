@@ -665,7 +665,8 @@
           notionFb.textContent = data.error || 'Export failed.';
           notionFb.className = 'fail';
         } else {
-          notionFb.textContent = `Saved ${data.exported} flight${data.exported !== 1 ? 's' : ''} to Notion ✓`;
+          const rt = lastSearch.return_date ? ` / return ${lastSearch.return_date}` : '';
+          notionFb.textContent = `Saved ${data.exported} flight${data.exported !== 1 ? 's' : ''} to Notion ✓  (${lastSearch.origin} → ${lastSearch.destination}, depart ${lastSearch.depart_date}${rt})`;
           notionFb.className = 'ok';
         }
       } catch {
