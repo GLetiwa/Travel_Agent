@@ -16,8 +16,15 @@ something works), tell me what you're doing and why before doing it for
 anything beyond a trivial fix.
 
 ## Current status
-Phase 1 (CLI) and Phase 2 (Web UI) complete and working locally. Starting
-Phase 3 (deploy to Render for shared access) — see plan below.
+Phases 1–4 complete and working: CLI, Web UI, Render deployment, and Notion
+export. Notion export had two bugs since fixed: ranking was inverted (now
+correct, #1 appears first) and all data was crammed into one Name column
+(now split into proper columns: Route, Name, Duration, Price, Stops, Reason).
+Phase 5 (Notion log usability + price tracking groundwork) in progress —
+part A not yet built, part B needs my confirmation before building (see
+Phase 5 plan). Phase 6 (search by city/place name) is scoped and queued
+next — see plan below. Work through Phase 5 before starting Phase 6 unless
+I say otherwise.
 
 ## How I run this today (Phase 1 — CLI, keep working)
 Manually from the terminal, on demand.
@@ -203,7 +210,157 @@ to GitHub; Render redeploys automatically. Local development (Phase 1/2
 commands below) keeps working exactly as before for testing changes before
 pushing.
 
-## Phase 4 (future direction — NOT STARTED, do not build any of this yet)
+## Phase 4 build plan (Share results to Notion) — COMPLETE
+Goal: after a search returns ranked results, a button on the page lets me
+send that search's top 5 to Notion, appended to one running log page/database
+I keep there. Manual trigger only — never automatic, never on every search.
+
+Actual columns in use: Route, Name (airline + rank), Duration, Price, Stops,
+Reason. Ranking order bug (inverted) and single-column-cramming bug are both
+fixed — #1 now appears first, data is split across proper typed columns.
+
+Notion setup (I do this manually, not Claude Code):
+1. Create an internal integration at notion.so/my-integrations (no OAuth
+   needed — single workspace, single user). Copy the Internal Integration
+   Token (starts with `secret_`) — this is the API key, treat it exactly
+   like the Duffel key (`.env`, never committed, Render env var once
+   deployed).
+2. Create or choose the Notion page/database that will serve as the running
+   log, and explicitly share it with the integration via that page's "Add
+   connections" menu in Notion. **This step is required and easy to miss —
+   the integration has zero access to anything until manually shared with
+   it, even with a valid token.** If API calls fail with a vague
+   "could not find object" error, this is almost always the cause — check
+   here first before debugging code.
+3. Note the database/page ID (visible in its Notion URL) — this gets stored
+   alongside the token, not hardcoded.
+
+Build steps:
+1. **Config**: add `NOTION_API_KEY` and `NOTION_DATABASE_ID` (or page ID) to
+   `.env` / `.env.example` / Render env vars, following the same pattern as
+   `DUFFEL_API_KEY`.
+2. **Notion client function**: a function that takes the top 5 scored offers
+   from a completed search and formats them as Notion content — one entry
+   per offer (or one block per offer if appending to a single page), each
+   showing: rank, price, airline, stops, duration, and the one-line ranking
+   "reason" text already produced by the scoring step. Reuse that reason
+   text — don't regenerate or rephrase it for Notion, keep the explanation
+   consistent with what's shown in the web UI.
+3. **API call**: implement the actual call to Notion's API (Bearer token +
+   `Notion-Version` header, like Duffel's pattern) to append this content to
+   the existing running page/database — never create a new page per search,
+   per my preference. Use `requests` directly, consistent with how Duffel is
+   called — no new SDK dependency unless there's a real reason to.
+4. **Button + endpoint**: add a "Send to Notion" button on the results page,
+   wired to a new backend route (e.g. `POST /export-notion`) that takes the
+   most recent search's results and calls the function from step 2-3. Only
+   fires on click — never automatically after a search completes.
+5. **Feedback**: show a clear success or failure message in the UI after
+   clicking — don't fail silently if the Notion call errors (same principle
+   as everywhere else in this app). On failure, show enough detail to know
+   if it's a missing-share issue (step 2 above) vs. something else.
+6. **(Later, optional)**: include the actual search route/dates as context
+   in the Notion entry, not just the 5 offers — not essential for v1.
+
+Notion's API allows roughly 3 requests/second — irrelevant at this usage
+(a manual button click), no rate-limit handling needed for v1.
+
+## Phase 5 build plan (Notion log usability + price tracking groundwork)
+Goal: make the Notion log actually browsable over time, and lay the
+groundwork to compare a re-run search against a past one. Two related but
+separable pieces — do step set A first, it's small; B is bigger.
+
+**A. Search identity in Notion (small, do first)**
+1. Add two more Notion columns: **Search Date** (the date the search was
+   run, not the flight's depart date — use a Notion date property) and
+   **Search Route+Dates** (e.g. "EWR→SFO, depart 2026-07-10" as one text
+   value) so every row is traceable back to which search produced it.
+2. Every row already saved to Notion stays as-is — don't backfill or modify
+   old rows, just start populating these two columns going forward.
+3. Confirm in the UI/console output which search just got saved (route,
+   dates) so I can sanity-check against what shows up in Notion.
+
+**B. Price tracking groundwork (medium — scope before building)**
+Idea: let me revisit a route/date I've searched before and see if the price
+moved since last time, using the Notion log itself as the historical record
+(no separate database needed — reuse what's already there).
+
+Before writing code, answer these for me first, then we'll confirm the
+approach together:
+- How do we match "this is the same search as before"? Likely: same route +
+  same depart/return dates + same cabin. Confirm this is enough, or if
+  something else (e.g. same passenger count) should factor in too.
+- When I run a search that matches a past one in Notion, how should the UI
+  show the comparison? (e.g. "previous best was $552, now $480 — down $72")
+  Keep this simple for v1 — a single price delta on the #1 ranked offer is
+  enough, not a full historical chart.
+- This only ever **reads** from Notion to compare, never auto-modifies past
+  rows — each search still appends a new row as before via the existing
+  "Save to Notion" button.
+
+Don't start the actual price-comparison logic until I've confirmed the
+matching rule and the UI approach above — this is exactly the kind of
+ambiguous architectural decision worth a quick check-in first, not a
+"pick the simplest interpretation and go" situation.
+
+**Noted but deferred**: multi-city / multiple-route comparison (e.g. compare
+NBO→LHR vs NBO→CDG side by side in one search) is a real idea I want
+eventually, but it's a bigger change — the current pipeline assumes one
+route per search. Not part of Phase 5. Revisit as its own phase after price
+tracking is solid.
+
+## Phase 6 build plan (Search by city/place name, not just airport codes)
+Goal: let me type a city or place name (e.g. "Lisbon") instead of needing to
+already know the IATA code, with live typeahead suggestions as I type — like
+a normal flight booking site. When a city has multiple airports (e.g.
+London: LHR, LGW, LCY, STN, LTN), show them as separate selectable options —
+I pick the specific one. Internally everything still resolves to a single
+IATA code per side before hitting the existing search pipeline — no changes
+needed to search/scoring/Notion logic, this is purely a front-end input
+layer.
+
+Data source: **Duffel's own Places suggestions endpoint**
+(`GET https://api.duffel.com/places/suggestions?query=...`), not a separate
+dataset or third-party service. Key facts (verified June 2026 — re-check if
+anything doesn't match what you see):
+- Returns Places (airports, cities, countries) matching a free-text query
+  string — handles partial matches (e.g. "Lis" → Lisbon results) and IATA
+  codes alike, so it also works as a way to validate a code someone already
+  knows.
+- Each airport result includes a `city_name` field and, for airports in a
+  metropolitan area, a nested `city` object listing all airports belonging
+  to that city (e.g. querying "London" surfaces the London city entry with
+  LHR, LGW, LCY, STN, LTN all listed under it).
+- Same auth pattern as flight search: Bearer token, `Duffel-Version` header.
+- No new API key needed — this is the same `DUFFEL_API_KEY` already in use.
+
+Build steps:
+1. **Backend suggestions endpoint**: add a route (e.g. `GET
+   /places?query=...`) that calls Duffel's places/suggestions endpoint and
+   returns simplified results (name, IATA code, city name) as JSON — keep
+   this as a thin proxy, not a place to add business logic.
+2. **Frontend typeahead**: as I type in the From/To fields, call `/places`
+   (debounced — don't fire a request on every keystroke, wait for a brief
+   pause) and show a dropdown of matching airports. If a city has multiple
+   airports, list each one individually with its own name/code visible
+   (e.g. "London Heathrow (LHR)", "London Gatwick (LGW)") — not collapsed
+   into one "London" entry, since I want to pick the specific airport.
+3. **Selection behavior**: picking a suggestion fills the field with a
+   readable label (e.g. "Lisbon (LIS)") but stores the actual IATA code
+   internally for the search request — the existing `/search` endpoint and
+   pipeline don't change at all, they still just receive IATA codes.
+4. **Fallback**: if someone types an IATA code directly (e.g. "LIS") instead
+   of using a suggestion, that should still work as before — don't require
+   the typeahead to be used, just support it.
+5. **Empty/no-match handling**: if a typed query returns no matches, show
+   that clearly rather than a silently empty dropdown (same no-silent-
+   failures principle as the rest of the app).
+
+Keep this self-contained — don't let it touch scoring, Notion export, or
+anything downstream of "user picked an origin and destination IATA code,"
+which is exactly what the app already expects today.
+
+## Phase 7 (future direction — NOT STARTED, do not build any of this yet)
 Idea for later: run searches automatically on a schedule, email me the
 results, and only ever proceed to an actual booking if I explicitly approve.
 Documenting this now so the idea isn't lost, not as something to act on.
@@ -222,11 +379,11 @@ Rough shape, for whenever this gets picked up:
   since the email was sent, what happens if I don't respond in time, how
   payment details are handled (never typed/stored in plain text).
 
-This is materially higher-stakes than Phases 1–3 (real money, real bookings,
+This is materially higher-stakes than Phases 1–6 (real money, real bookings,
 sending email on my behalf) and should be scoped deliberately and discussed
 in detail before any code is written — not treated as a quick add-on once
-earlier phases are done. Deployment (Phase 3) is the current priority; do
-not start any Phase 4 work until I explicitly ask for it.
+earlier phases are done. Phase 6 (city/place search) is the current
+priority; do not start any Phase 7 work until I explicitly ask for it.
 
 ## Conventions
 - Python 3.11+ target, though dev venv currently on 3.9 (macOS system
@@ -243,17 +400,23 @@ not start any Phase 4 work until I explicitly ask for it.
   showing results, so it's easy to sanity-check the input wasn't mis-parsed.
 
 ## Secrets & safety
-- API key lives in `.env`, loaded via `python-dotenv`, never committed.
+- API key(s) live in `.env`, loaded via `python-dotenv`, never committed —
+  this applies equally to `DUFFEL_API_KEY` and the new `NOTION_API_KEY`.
 - `.env` must be in `.gitignore`.
 - This tool only ever reads flight data. It must never attempt to create an
   order/booking via the API, and must never send email or any other message
-  on my behalf. See "Phase 4" above for the future direction on this — not
+  on my behalf. See "Phase 7" above for the future direction on this — not
   started, needs explicit discussion before any of it is built.
 - Phase 3 deployment (Render) is for 1-2 trusted people only, gated by a
   single shared password — not a public app. Do not add user accounts,
   per-user API keys, public sign-up, or remove the access gate unless I
-  explicitly ask. Never commit the Duffel API key or the access-gate
-  password to GitHub — both live as environment variables on Render.
+  explicitly ask. Never commit the Duffel API key, Notion key, or the
+  access-gate password to GitHub — all live as environment variables on
+  Render.
+- The Notion integration only ever appends to the one running log page I've
+  explicitly shared with it. Never create new pages/databases, never write
+  to any other Notion content, never request broader Notion permissions than
+  what's needed to append content to that one shared page.
 
 ## What to do when something's ambiguous
 Pick the simplest reasonable interpretation, tell me what you assumed, and
@@ -275,5 +438,19 @@ Verified working against real Duffel data, results look good.
 Phase 2 (Web UI) complete: Flask backend, /search endpoint, frontend form
 with ranked results, working end to end locally at localhost:5002.
 
-Phase 3 (Deploy to Render for shared access) starting: not yet built. Start
-from Phase 3 build plan, step 1 (get the app onto GitHub).
+Phase 3 (Deploy to Render for shared access) complete: live on Render behind
+a shared password, accessible to 1-2 trusted people.
+
+Phase 4 (Share results to Notion) complete: working end to end, including
+fixes for two bugs found after initial build — inverted ranking (fixed, #1
+now appears first) and all data crammed into one column (fixed, now split
+across Route/Name/Duration/Price/Stops/Reason columns).
+
+Phase 5 (Notion log usability + price tracking groundwork) starting: not yet
+built. Start with part A (Search Date + Search Route+Dates columns) — small
+and self-contained. Part B (price comparison logic) needs a quick
+confirmation of the matching rule and UI approach before building, per the
+notes in the Phase 5 plan above.
+
+Phase 6 (Search by city/place name via Duffel Places suggestions) scoped and
+queued: not yet built. Do this after Phase 5, unless told otherwise.
